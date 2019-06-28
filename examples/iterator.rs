@@ -12,7 +12,8 @@ struct KittenIterator {
 }
 
 impl KittenIterator {
-    fn new(kittens: Vec<String>) -> Self {
+    fn new(mut kittens: Vec<String>) -> Self {
+        kittens.reverse();
         Self { cursor: 0, kittens }
     }
 }
@@ -21,9 +22,8 @@ impl AsyncIterator for KittenIterator {
     type Item = String;
     type Fut = Pin<Box<Future<Output = Option<Self::Item>>>>;
     fn next(&mut self) -> Self::Fut {
-        let cursor = self.cursor;
         self.cursor += 1;
-        let kitten = self.kittens.get(cursor).map(|k| k.clone());
+        let kitten = self.kittens.pop();
         Box::pin(future::ready(kitten))
     }
 }

@@ -2,14 +2,82 @@
 [![crates.io version][1]][2] [![build status][3]][4]
 [![downloads][5]][6] [![docs.rs docs][7]][8]
 
-Async IO traits that use futures instead of poll.
+Async IO traits that use futures instead of poll. This is an experiment to see
+if using `async fn` for the `futures::io` traits is possible.
 
 - [Documentation][8]
 - [Crates.io][2]
 - [Releases][releases]
 
+## Why does this exist?
+This is useful because currently implementing `AsyncRead`, `AsyncWrite`, and
+`Stream` require knowledge of `Poll`, `Pin`, and arbitrary self types. We
+think it would be an ergonomics improvement if knowledge of these concepts was
+not required to implement these traits. Instead once `async fn` in traits comes
+around we think that would make a great fit:
+
+```rust
+pub trait AsyncRead {
+    async fn read(&mut self, buf: &mut [u8]) -> io::Result<usize>;
+}
+
+pub trait AsyncWrite {
+    async fn write(&mut self, buf: &[u8]) -> io::Result<usize>;
+}
+
+pub trait AsyncIterator {
+    type Item;
+    async fn next(&mut self) -> Option<Self::Item>;
+}
+```
+
+These would be direct async counterparts to `Read`, `Write` and `Iterator`:
+
+```rust
+pub trait AsyncRead {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize>;
+}
+
+pub trait AsyncWrite {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize>;
+}
+
+pub trait AsyncIterator {
+    type Item;
+    fn next(&mut self) -> Option<Self::Item>;
+}
+```
+
+However currently `async fn` in traits doesn't work. So we're defining these
+traits with an associated type instead.
+
+```rust
+pub trait AsyncRead {
+    type Fut: Future<Output = io::Result<usize>>;
+    fn read(&mut self, buf: &mut [u8]) -> Self::Fut;
+}
+
+pub trait AsyncWrite {
+    type Fut: Future<Output = io::Result<usize>>;
+    fn write(&mut self, buf: &[u8]) -> Self::Fut;
+}
+
+pub trait AsyncIterator {
+    type Item;
+    type Fut: Future<Output = Option<Self::Item>>;
+    fn next(&mut self) -> Self::Fut;
+}
+```
+
+Because of compiler reasons this means there currently is the overhead of an
+extra box. But we think that's fine, as it's unlikely to become a bottleneck,
+and this would be temporary anyway.
+
+However a limitation is that this can't return borrowed values, as it relies on
+GATs. Which seems like the most convincing counterpoint to using these traits
+today.
+
 ## Examples
-__Basic usage__
 ```rust
 #![feature(async_await)]
 
@@ -25,7 +93,8 @@ struct KittenIterator {
 }
 
 impl KittenIterator {
-    fn new(kittens: Vec<String>) -> Self {
+    fn new(mut kittens: Vec<String>) -> Self {
+        kittens.reverse();
         Self { cursor: 0, kittens }
     }
 }
@@ -34,9 +103,8 @@ impl AsyncIterator for KittenIterator {
     type Item = String;
     type Fut = Pin<Box<Future<Output = Option<Self::Item>>>>;
     fn next(&mut self) -> Self::Fut {
-        let cursor = self.cursor;
         self.cursor += 1;
-        let kitten = self.kittens.get(cursor).map(|k| k.clone());
+        let kitten = self.kittens.pop();
         Box::pin(future::ready(kitten))
     }
 }
