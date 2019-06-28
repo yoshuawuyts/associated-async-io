@@ -1,0 +1,17 @@
+[package]
+name = "associated-async-io"
+version = "1.0.0"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/yoshuawuyts/associate-async-io"
+documentation = "https://docs.rs/associate-async-io"
+description = "Async IO traits that use futures instead of poll."
+keywords = []
+categories = ["asynchronous"]
+authors = ["Yoshua Wuyts <yoshuawuyts@gmail.com>"]
+readme = "README.md"
+edition = "2018"
+
+[dependencies]
+
+[dev-dependencies]
+futures-preview = "0.3.0-alpha.16"
